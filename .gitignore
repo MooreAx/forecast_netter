@@ -1,0 +1,18 @@
+# R hidden files
+.Rproj*
+.RData
+.Rhistory
+
+# all the outputs
+outputs/
+
+# all the inputs
+input_data_frames/*.csv
+
+# pycache
+__pycache__
+
+# Excel
+*.xlsx
+
+
