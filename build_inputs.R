@@ -20,6 +20,7 @@ RefParts <- read_csv(
   paste(MAPEBIAS, "Intermediates/RefParts.csv", sep = "/")
 )
 
+RefParts %>% write_csv("input_data_frames/RefParts.csv")
 
 #POD REQUIREMENTS
 POD_long <- read_csv(paste(MAPEBIAS,"POD_long.csv", sep = "/"))
@@ -42,10 +43,9 @@ FC %>% write_csv("input_data_frames/Forecast.csv")
 production_plan <- read_csv(
   paste(MAPEBIAS, "WeeklyUploads/Production Plan.csv", sep="/")) %>%
   select(item, SOW, quantity, plan_date) %>%
-  rename(part = item) %>%
-  
-  #CHECK HERE - is this step appropriate?
-  mutate(part = str_remove(part, "-UL"))
+  rename(part = item)
+
+#do not remove the -ULs strings! these require careful processing.
 
 production_plan %>% write_csv("input_data_frames/production_plan.csv")
 
@@ -83,7 +83,7 @@ InvData <- read_xlsx(
   ) %>%
   filter(
     #get rid of anything that has been hanging around in quality hold for a while...
-    !(qa_status %in% c("QPW", "AWP", "QAP") & age > 28)
+    !(qa_status %in% c("QWP", "AWP", "QAP") & age > 28)
   ) %>%
   rename(
     part = name,
