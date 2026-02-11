@@ -7,7 +7,7 @@ import pandas as pd
 #get objects
 from .build_objects import (
     forecast_dict, part_list,
-    inv_med_list, inv_rec_stamped_list, inv_any_unstamped_list, inv_production_list,
+    inv_med_list, inv_rec_stamped_list, inv_any_unstamped_list, inv_production_list, inv_ul_list,
     ForecastKey,
     sim
 )
@@ -28,6 +28,7 @@ def inv_snapshot(inv_list):
             'manufactured': inv.manufactured,
             'qty': inv.qty,
             'age': inv.age_days,
+            'group': inv.group,
             'date': sim.date
         }
         for inv in inv_list
@@ -74,6 +75,7 @@ def fifo_inventory_list(inv_list, part, prov, channel, pod, demand, LOG):
             'inv_consumed': used,
             'inv_channel': inv.channel,
             'inv_lot': inv.lot,
+            'inv_group': inv.group,
             'inv_manufactured': inv.manufactured,
             'inv_age_at_ship': inv.age_days
         })
@@ -88,7 +90,8 @@ def short_reason_tuple(inv_list, part, prov, channel, remaining):
             and (inv.prov == prov or inv.prov == 'ANY')
             and (inv.channel == channel or inv.channel == 'ANY')
             and inv.qty > 0
-            and inv.age_days > 0
+            and inv.is_available
+            #pod filter not required because all inventory will be aged at this point
         )
     ]
     total_aged = sum(inv.qty for inv in aged_inv)
@@ -106,7 +109,7 @@ SHIPMENTLOG = []
 SHORTLOG = []
 
 #get inv snapshot before running
-inventory_start_df = inv_snapshot(inv_med_list + inv_rec_stamped_list + inv_any_unstamped_list + inv_production_list)
+inventory_start_df = inv_snapshot(inv_med_list + inv_rec_stamped_list + inv_any_unstamped_list + inv_production_list + inv_ul_list)
 
 for _ in range(100):
     for part in part_list:
@@ -125,12 +128,13 @@ for _ in range(100):
                     remaining = fifo_inventory_list(inv_rec_stamped_list, part, prov, channel, pod, remaining, SHIPMENTLOG)
                     remaining = fifo_inventory_list(inv_any_unstamped_list, part, prov, channel, pod, remaining, SHIPMENTLOG)
                     remaining = fifo_inventory_list(inv_production_list, part, prov, channel, pod, remaining, SHIPMENTLOG)
+                    remaining = fifo_inventory_list(inv_ul_list, part, prov, channel, pod, remaining, SHIPMENTLOG)
 
                     if remaining == 0:
                         pass
-                    elif remaining > 0:    
+                    elif remaining > 0:
                         
-                        all_inv = inv_med_list + inv_rec_stamped_list + inv_any_unstamped_list + inv_production_list
+                        all_inv = inv_med_list + inv_rec_stamped_list + inv_any_unstamped_list + inv_production_list + inv_ul_list
                         reason, total_aged, min_aged_days = short_reason_tuple(all_inv, part, prov, channel, remaining) #unpack tuple
 
                         SHORTLOG.append({
@@ -153,7 +157,7 @@ for _ in range(100):
 
 
 #get ending inv snapshot
-inventory_end_df = inv_snapshot(inv_med_list + inv_rec_stamped_list + inv_any_unstamped_list + inv_production_list)
+inventory_end_df = inv_snapshot(inv_med_list + inv_rec_stamped_list + inv_any_unstamped_list + inv_production_list + inv_ul_list)
 
 #convert logs to dfs and export
 pd.DataFrame(SHIPMENTLOG).to_csv("outputs/shipmentlog.csv", index=False)

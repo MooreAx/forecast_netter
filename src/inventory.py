@@ -2,7 +2,7 @@ from .simulation import Simulation
 
 
 class Inventory:
-    def __init__(self, part, prov, channel, lot, qa_status, manufactured, available, qty, sim):
+    def __init__(self, part, prov, channel, lot, qa_status, manufactured, available, qty, group, sim):
         self.part = part
         self.prov = prov
         self.channel = channel
@@ -11,11 +11,15 @@ class Inventory:
         self.manufactured = manufactured
         self.available = available
         self.qty = qty
+        self.group = group
         self.sim = sim # composition: reference to the simulation
 
     @property
     def age_days(self):
-        return (self.sim.date - self.manufactured).days
+        if self.group == "unlabelled":
+            return 1 #unlabelled products do not age...
+        else:
+            return (self.sim.date - self.manufactured).days
     
     @property
     def is_available(self):

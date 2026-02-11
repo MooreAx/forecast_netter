@@ -12,6 +12,7 @@ df_forecast = pd.read_csv("input_data_frames/Forecast.csv", dtype = str).clean_n
 df_inv_med = pd.read_csv("input_data_frames/Inv_Med.csv", dtype = str).clean_names()
 df_inv_rec_stamped = pd.read_csv("input_data_frames/Inv_Rec_Stamped.csv", dtype = str).clean_names()
 df_inv_rec_unstamped = pd.read_csv("input_data_frames/Inv_Rec_Unstamped.csv", dtype = str).clean_names()
+df_inv_ul = pd.read_csv("input_data_frames/Inv_UL.csv", dtype = str).clean_names()
 
 #production
 df_production = pd.read_csv("input_data_frames/production_plan.csv", dtype = str).clean_names()
@@ -48,8 +49,8 @@ def process_inv(df):
 
             #if in a hold status, delay availability for 2 weeks
             available = lambda x: [
-                m + timedelta(weeks = 2) if s in quality_hold_status else FCSTART
-                for m, s in zip(x['manufactured'], x['qa_status'])
+                FCSTART + timedelta(weeks = 2) if s in quality_hold_status else FCSTART
+                for _, s in zip(x['manufactured'], x['qa_status'])
             ],
         )
     )
@@ -58,6 +59,7 @@ def process_inv(df):
 df_inv_med = process_inv(df_inv_med)
 df_inv_rec_stamped = process_inv(df_inv_rec_stamped)
 df_inv_rec_unstamped = process_inv(df_inv_rec_unstamped)
+df_inv_ul = process_inv(df_inv_ul)
 
 
 # Print head
@@ -72,6 +74,9 @@ print(df_inv_rec_stamped.head())
 
 print("\n\nRec Inventory (Unstamped):")
 print(df_inv_rec_unstamped.head())
+
+print("\n\nUL:")
+print(df_inv_ul.head())
 
 print("\n\nProduction:")
 print(df_production.head())

@@ -109,7 +109,20 @@ Inv_Rec_Unstamped <- InvData %>%
   group_by(part, qa_status, lotnum, pool, manufactured, age) %>%
   summarise(qty = sum(qty), .groups = "drop")
 
+#temp addition to add ULs
+Inv_UL <- InvData %>%
+  filter(
+    str_detect(part, "\\d{6}-UL"),
+    age < 360*1.5
+  ) %>%
+  group_by(part, qa_status, lotnum, pool, manufactured, age) %>%
+  summarise(qty = sum(qty), .groups = "drop") %>%
+  mutate(
+    part = str_remove(part, "-UL")
+  )
+
 #write to csv
 Inv_Med %>% write_csv("input_data_frames/Inv_Med.csv")
 Inv_Rec_Stamped %>% write_csv("input_data_frames/Inv_Rec_Stamped.csv")
 Inv_Rec_Unstamped %>% write_csv("input_data_frames/Inv_Rec_Unstamped.csv")
+Inv_UL %>% write_csv("input_data_frames/Inv_UL.csv")
