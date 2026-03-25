@@ -1,5 +1,6 @@
 #build data frames for reading into Python:
 # --> Inventory
+# ----> note - UL inventory should be quantity, not available
 # --> PODs
 # --> Demand
 # --> Supply
@@ -47,7 +48,9 @@ production_plan <- read_csv(
 
 #do not remove the -ULs strings! these require careful processing.
 
-production_plan %>% write_csv("input_data_frames/production_plan.csv")
+production_plan %>%
+  filter(quantity > 0) %>% 
+  write_csv("input_data_frames/production_plan.csv")
 
 #INTERNAL INVENTORY
 
@@ -69,20 +72,26 @@ InvData <- read_xlsx(
   col_types = "text"  # same as setting all columns to character
 ) %>%
   clean_names() %>%
-  select(name, number, is_stamped, pool, qa_status, warehouse, id, manufactured, available) %>%
+  select(name, number, is_stamped, pool, qa_status, warehouse, id, manufactured, quantity, available) %>%
   mutate(
     manufactured = parse_number(manufactured),
-    manufactured = as.Date(manufactured, origin = "1899-12-30"),
+    manufactured = case_when(
+      is.na(manufactured) & str_detect(name, "-UL") ~ today()-days(1), #ULs are allowed to have blank manufacturing dates.
+      .default = as.Date(manufactured, origin = "1899-12-30")
+    ),
     age = interval(manufactured, latest_file_date),
     age = time_length(age, "days"),
-    available = parse_number(available)
+    available = parse_number(quantity), #take *quantity* for all parts!
   ) %>%
+  select(-quantity) %>% #no longer need qty as it's rolled into available
+  
   filter(
     qa_status %in% c("A", "eComm-A", "QWP", "AWP", "QAP"),
     available > 0
   ) %>%
   filter(
     #get rid of anything that has been hanging around in quality hold for a while...
+    #this step kills a lot of the UL inventory...
     !(qa_status %in% c("QWP", "AWP", "QAP") & age > 28)
   ) %>%
   rename(
