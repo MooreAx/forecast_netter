@@ -3,6 +3,7 @@
 from datetime import datetime
 from pprint import pprint
 import pandas as pd
+import copy
 
 #get objects
 from .build_objects import (
@@ -13,6 +14,7 @@ from .build_objects import (
 )
 
 from .globals import *
+from .simulation import SimulationState
 
 prov_list = 'BC,AB,SK,MB,ON,QC,NB,NS,PE,NL,MED'.split(',')
 channel_list = 'MED,REC'.split(',')
@@ -104,14 +106,91 @@ def short_reason_tuple(inv_list, part, prov, channel, remaining):
 
     return reason, total_aged, min_aged_days #tuple
 
-#log
+#logs
 SHIPMENTLOG = []
 SHORTLOG = []
+WOHLOG = []
 
 #get inv snapshot before running
 inventory_start_df = inv_snapshot(inv_med_list + inv_rec_stamped_list + inv_any_unstamped_list + inv_production_list + inv_ul_list)
 
+def calculate_woh(state):
+    main_sim_date = state.sim.date
+
+    woh_sim = state.sim
+    woh_inv = state.inventories
+
+    #need a shipmente log - won't actually use this
+    tempshiplog = []
+
+    #unpack tuple
+    (inv_med_list, inv_rec_stamped_list, inv_any_unstamped_list, inv_production_list, inv_ul_list) = woh_inv 
+    
+    #only get inventory that is on hand and released as at this pt, for woh calc
+    inv_med_list = [inv for inv in inv_med_list if inv.is_available]
+    inv_rec_stamped_list = [inv for inv in inv_rec_stamped_list if inv.is_available]
+    inv_any_unstamped_list = [inv for inv in inv_any_unstamped_list if inv.is_available]
+    inv_production_list = [inv for inv in inv_production_list if inv.is_available]
+    inv_ul_list = [inv for inv in inv_ul_list if inv.is_available]
+
+    for _ in range(100):
+        done_pp = set() #keep track of completions, reset after every outer loop
+        for part in part_list:
+            for prov in prov_list:
+
+                if (part, prov) in done_pp:
+                    continue
+
+                for channel in channel_list:
+
+                    #get forecast            
+                    key = ForecastKey(part=part, prov=prov, channel=channel, week=woh_sim.date)
+                    fcval = forecast_dict.get(key)
+
+                    if fcval: #key match
+                        pod = fcval.pod
+                        demand = fcval.qty
+
+                        remaining = fifo_inventory_list(inv_med_list, part, prov, channel, pod, demand, tempshiplog)
+                        remaining = fifo_inventory_list(inv_rec_stamped_list, part, prov, channel, pod, remaining, tempshiplog)
+                        remaining = fifo_inventory_list(inv_any_unstamped_list, part, prov, channel, pod, remaining, tempshiplog)
+                        remaining = fifo_inventory_list(inv_production_list, part, prov, channel, pod, remaining, tempshiplog)
+                        remaining = fifo_inventory_list(inv_ul_list, part, prov, channel, pod, remaining, tempshiplog)
+
+                        if remaining == 0:
+                            pass
+                        elif remaining > 0:
+
+                            WOHLOG.append({
+                                'part': part,
+                                'prov': prov,
+                                'channel': channel,
+                                'main_sim_date': main_sim_date,
+                                'sub_sim_date': woh_sim.date,
+                                'demand': demand,
+                                'pod': pod,
+                                'forecast': demand,
+                                'short': remaining
+                            })
+
+                            done_pp.add((part, prov))
+                    else: #no key match
+                        continue
+        woh_sim.advance_week()
+
+    
+
+
 for _ in range(100):
+
+    #deep copy for woh calculation
+    all_inv = (inv_med_list, inv_rec_stamped_list, inv_any_unstamped_list, inv_production_list, inv_ul_list) #tuple
+    state = SimulationState(sim, all_inv)
+    state_copy = copy.deepcopy(state)
+
+    #calculate WOH based on current state
+    calculate_woh(state_copy)
+
     for part in part_list:
         for prov in prov_list:
             for channel in channel_list:
@@ -162,6 +241,8 @@ inventory_end_df = inv_snapshot(inv_med_list + inv_rec_stamped_list + inv_any_un
 #convert logs to dfs and export
 pd.DataFrame(SHIPMENTLOG).to_csv("outputs/shipmentlog.csv", index=False)
 pd.DataFrame(SHORTLOG).to_csv("outputs/shortlog.csv", index=False)
+pd.DataFrame(WOHLOG).to_csv("outputs/wohlog.csv", index=False)
+
 
 #inventory snapshots to df:
 inventory_start_df.to_csv("outputs/starting_inv.csv", index=False)

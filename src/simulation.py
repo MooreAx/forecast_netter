@@ -8,3 +8,9 @@ class Simulation:
     def advance_week(self):
         self.date += timedelta(weeks=1)
         self.week += 1
+
+
+class SimulationState:
+    def __init__(self, sim, inventories):
+        self.sim = sim
+        self.inventories = inventories

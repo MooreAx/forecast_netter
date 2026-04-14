@@ -4,6 +4,7 @@ starting_inv <- read_csv("outputs/starting_inv.csv") %>% clean_names()
 ending_inv <- read_csv("outputs/ending_inv.csv") %>% clean_names()
 shipments <- read_csv("outputs/shipmentlog.csv") %>% clean_names()
 shorts <- read_csv("outputs/shortlog.csv") %>% clean_names()
+woh_log <- read_csv("outputs/wohlog.csv") %>% clean_names()
 
 EffectiveDate <- min(FC$Date)
 
@@ -76,6 +77,63 @@ pos <- read_csv(
   summarise(qty = sum(remaining), .groups = "drop")
 
 
+
+#analyze woh
+woh <- woh_log %>%
+  mutate(
+    relwks = as.numeric(difftime(sub_sim_date, main_sim_date, unit = "weeks"))
+  ) %>%
+  
+  #get first short per part, prov, channel, main_sim_date
+  group_by(part, prov, channel, main_sim_date) %>%
+  summarise(
+    first_short = min(relwks)
+  )
+
+#get forward demand per part, prov, channel (for average weighting):
+woh_calcs <- FC %>%
+  group_by(Part, Prov, Channel) %>%
+  arrange(desc(Date), .by_group = TRUE) %>%
+  mutate(
+    fwd_demand = cumsum(FC),
+    fwd_wks = row_number()
+  ) %>%
+  ungroup() %>%
+  select(Part, Prov, Channel, Date, fwd_demand, fwd_wks) %>%
+  
+  #bring in first shorts:
+  left_join(
+    woh,
+    join_by(Part == part, Prov == prov, Channel == channel, Date == main_sim_date)
+  ) %>%
+  mutate(
+    woh = case_when(
+      is.na(first_short) ~ fwd_wks,
+      .default = first_short
+    ),
+    fwd_demand_times_woh = woh * fwd_demand
+  ) %>%
+  group_by(Part, Date) %>%
+  summarise(
+    fwd_demand_times_woh = sum(fwd_demand_times_woh),
+    fwd_demand = sum(fwd_demand),
+    .groups = "drop"
+  ) %>% mutate(
+    wWOH = fwd_demand_times_woh / fwd_demand
+  ) %>%
+  select(Part, Date, wWOH)
+  
+woh_wide <- woh_calcs %>%
+  pivot_wider(
+    names_from = Date,
+    values_from = wWOH,
+  )
+
+
+
+
+
+
 #write to outputs
 rows %>% write_csv("outputs/R_OUT/rows.csv")
 MonthlyFC %>% write_csv("outputs/R_OUT/monthly_fc.csv")
@@ -85,3 +143,6 @@ pp_month %>% write_csv("outputs/R_OUT/pp_month.csv")
 xs_existing %>% write_csv("outputs/R_OUT/xs_existing.csv")
 xs_production %>% write_csv("outputs/R_OUT/xs_production.csv")
 pos %>% write_csv("outputs/R_OUT/monthly_pos.csv")
+
+woh_calcs %>% write_csv("outputs/R_OUT/woh.csv")
+woh_wide %>% write_csv("outputs/R_OUT/woh_wide.csv")
